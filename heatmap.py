@@ -1,42 +1,31 @@
-from flask import Flask, render_template
-import os
-import plotly.express as px
+from flask import Flask, render_template, request
 import pandas as pd
-import re
-from datetime import datetime, timedelta
+import os
+from bokeh.plotting import figure
+from bokeh.embed import components
+from bokeh.models import HoverTool, ColumnDataSource
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=os.path.abspath('templates'))
 
-@app.route('/')
+@app.route('/heatmap')
 def heatmap():
-    directory = "./ss"
+    start_date = request.args.get('start_date', default = (datetime.now() - relativedelta(weeks=1)).strftime('%Y-%m-%d'), type = str)
+    end_date = request.args.get('end_date', default = datetime.now().strftime('%Y-%m-%d'), type = str)
 
-    start_date = datetime.now() - timedelta(days=7)
-    end_date = datetime.now()
-
-    files = os.listdir(directory)
-    files = [f for f in files if f.startswith('Screenshot')]
-
-    date_time_list = []
-    for file in files:
-        match = re.search(r"(\d{4}-\d{2}-\d{2} at \d{2}.\d{2}.\d{2} (AM|PM))", file)
-        if match:
-            date_time_str = match.group(1)
-            date_time = datetime.strptime(date_time_str, '%Y-%m-%d at %I.%M.%S %p')
-            if start_date <= date_time <= end_date:
-                date_time_list.append((date_time, file))
-
-    df = pd.DataFrame(date_time_list, columns=["Datetime", "File"])
-    df['Date'] = df['Datetime'].dt.date
-    df['Hour'] = df['Datetime'].dt.hour
-    df['File'] = "<a href=\"ss/" + df['File'] + "\">" + df['Hour'].astype(str) + "</a>"
-
-    pivot_table = pd.pivot_table(df, values='File', index='Hour', columns='Date', aggfunc=lambda x: ' '.join(x), fill_value="")
-    
-    fig = px.imshow(pivot_table, labels=dict(x="Date", y="Hour", color="Frequency"))
-    div = fig.to_html(full_html=False)
-
-    return render_template('index.html', plot_div=div)
+    path = os.path.abspath('./ss')
+    file_info = [(f, *f.split(' ')[1].split(' at '), os.path.join(path, f)) for f in os.listdir(path) if start_date <= f.split(' ')[1] <= end_date]
+    ss_df = pd.DataFrame(file_info, columns=["file_path", "date", "time", "ss_link"])
+    ss_df['time'] = pd.to_datetime(ss_df['time'], format="%I.%M.%S %p")
+    ss_resampled = ss_df.set_index("time").groupby(pd.Grouper(freq='H')).ss_link.apply(list).reset_index()
+    ss_resampled['hour'] = ss_resampled.time.dt.hour
+    source = ColumnDataSource(ss_resampled)
+    hover = HoverTool(tooltips=[("Time", "@time{%F %T}"), ("Screenshot", "@ss_link")], formatters={"@time": "datetime"})
+    p = figure(x_axis_type="datetime", plot_width=800, plot_height=350, tools=[hover], title="Screenshots Heatmap")
+    p.vbar(x='time', top='hour', source=source, width=0.5)
+    script, div = components(p)
+    return render_template('index.html', script=script, div=div)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    app.run(debug=False, port=5001)

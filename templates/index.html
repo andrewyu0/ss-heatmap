@@ -1,9 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Screenshot Heatmap</title>
+  <title>Screenshots Heatmap</title>
+  <link href="http://cdn.pydata.org/bokeh/release/bokeh-3.2.0.min.css" rel="stylesheet" type="text/css">
+  <script src="http://cdn.pydata.org/bokeh/release/bokeh-3.2.0.min.js"></script>
 </head>
 <body>
-    {{plot_div|safe}}
+  <div>
+    {{ div|safe }}
+  </div>
+  <script type="text/javascript">
+    {{ script|safe }}
+  </script>
 </body>
 </html>
